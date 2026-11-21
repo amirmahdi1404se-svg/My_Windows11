@@ -13,12 +13,12 @@ jobs:
       - name: Install Required Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage p7zip-full qemu-utils qemu-efi-aarch64 wget
+          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage xorriso p7zip-full qemu-utils qemu-efi-aarch64 wget
 
       - name: Download & Build Official Windows 11 ISO
         run: |
           mkdir -p uup_work
-          unzip *.zip -d uup_work
+          unzip -o *.zip -d uup_work
           cd uup_work
           chmod +x uup_download_linux.sh
           ./uup_download_linux.sh
@@ -27,15 +27,17 @@ jobs:
         run: |
           wget -O virtio-win.iso https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
           mkdir -p iso_extract virtio_extract
-          7z x uup_work/*.ISO -oiso_extract || 7z x uup_work/*.iso -oiso_extract
-          7z x virtio-win.iso -ovirtio_extract
+          7z x uup_work/*.ISO -oiso_extract -y || 7z x uup_work/*.iso -oiso_extract -y
+          7z x virtio-win.iso -ovirtio_extract -y
           cp autounattend.xml iso_extract/
-          mkdir -p iso_extract/\$WinPEDriver\$
-          cp -r virtio_extract/viostor/w11/ARM64/* iso_extract/\$WinPEDriver\$/
-          cp -r virtio_extract/NetKVM/w11/ARM64/* iso_extract/\$WinPEDriver\$/
-          cp -r virtio_extract/viosnd/w11/ARM64/* iso_extract/\$WinPEDriver\$/
-          cp -r virtio_extract/vioinput/w11/ARM64/* iso_extract/\$WinPEDriver\$/
-          mkisofs -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -eltorito-alt-boot -eltorito-platform efi -b efi/microsoft/boot/efisys_noprompt.bin -no-emul-boot -o win11_custom.iso iso_extract
+          mkdir -p 'iso_extract/$WinPEDriver$'
+          find virtio_extract -type d -iname "ARM64" -exec cp -r {}/* 'iso_extract/$WinPEDriver$/' \; 2>/dev/null || true
+          EFI_BOOT=$(cd iso_extract && find . -iname "efisys_noprompt.bin" | sed 's|^\./||' | head -n 1)
+          if [ -z "$EFI_BOOT" ]; then
+            EFI_BOOT=$(cd iso_extract && find . -iname "efisys.bin" | sed 's|^\./||' | head -n 1)
+          fi
+          echo "Found UEFI Boot file: $EFI_BOOT"
+          xorriso -as mkisofs -iso-level 3 -UDF -V "WIN11_ARM64" -e "$EFI_BOOT" -no-emul-boot -o win11_custom.iso iso_extract
 
       - name: Create Virtual Hard Drive & BIOS
         run: |
