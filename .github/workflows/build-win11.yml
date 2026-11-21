@@ -18,10 +18,13 @@ jobs:
       - name: Download & Build Official Windows 11 ISO
         run: |
           mkdir -p uup_work
-          unzip -o *.zip -d uup_work
+          LATEST_ZIP=$(ls -t *.zip | head -n 1)
+          echo "Using zip file: $LATEST_ZIP"
+          unzip -o "$LATEST_ZIP" -d uup_work
           cd uup_work
           chmod +x uup_download_linux.sh
-          ./uup_download_linux.sh
+          sed -i 's/aria2c /aria2c --retry-wait=5 --max-tries=10 /g' uup_download_linux.sh
+          ./uup_download_linux.sh || ./uup_download_linux.sh
 
       - name: Download VirtIO Laptop Drivers & Combine
         run: |
