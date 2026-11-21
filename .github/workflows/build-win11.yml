@@ -1,0 +1,53 @@
+name: Build Windows 11 for Tablet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-win11:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Files
+        uses: actions/checkout@v4
+
+      - name: Install Required Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 cabextract wimtools chntpw genisoimage p7zip-full qemu-utils qemu-efi-aarch64 wget
+
+      - name: Download & Build Official Windows 11 ISO
+        run: |
+          mkdir -p uup_work
+          unzip *.zip -d uup_work
+          cd uup_work
+          chmod +x uup_download_linux.sh
+          ./uup_download_linux.sh
+
+      - name: Download VirtIO Laptop Drivers & Combine
+        run: |
+          wget -O virtio-win.iso https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
+          mkdir -p iso_extract virtio_extract
+          7z x uup_work/*.ISO -oiso_extract || 7z x uup_work/*.iso -oiso_extract
+          7z x virtio-win.iso -ovirtio_extract
+          cp autounattend.xml iso_extract/
+          mkdir -p iso_extract/\$WinPEDriver\$
+          cp -r virtio_extract/viostor/w11/ARM64/* iso_extract/\$WinPEDriver\$/
+          cp -r virtio_extract/NetKVM/w11/ARM64/* iso_extract/\$WinPEDriver\$/
+          cp -r virtio_extract/viosnd/w11/ARM64/* iso_extract/\$WinPEDriver\$/
+          cp -r virtio_extract/vioinput/w11/ARM64/* iso_extract/\$WinPEDriver\$/
+          mkisofs -b boot/etfsboot.com -no-emul-boot -boot-load-size 8 -eltorito-alt-boot -eltorito-platform efi -b efi/microsoft/boot/efisys_noprompt.bin -no-emul-boot -o win11_custom.iso iso_extract
+
+      - name: Create Virtual Hard Drive & BIOS
+        run: |
+          qemu-img create -f qcow2 windows11.qcow2 32G
+          cp /usr/share/AAVMF/AAVMF_CODE.fd UEFI_BIOS.fd
+
+      - name: Upload Final Windows 11 Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows11-Ready-For-Tablet
+          path: |
+            win11_custom.iso
+            virtio-win.iso
+            windows11.qcow2
+            UEFI_BIOS.fd
